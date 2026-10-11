@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Keys - GHProxy</title>
+    <style>
+        :root { --bg: #000; --card: #111; --red: #FF0000; --txt: #fff; --gray: #333; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--txt); margin: 0; padding: 0; }
+        header { background: var(--red); padding: 15px; text-align: center; box-shadow: 0 2px 10px rgba(255,0,0,0.3); }
+        .container { padding: 20px; max-width: 600px; margin: 0 auto; }
+        .card { background: var(--card); border: 1px solid var(--gray); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #aaa; font-size: 0.9em; }
+        input, select { width: 100%; padding: 12px; background: #222; border: 1px solid var(--gray); color: white; border-radius: 4px; box-sizing: border-box; margin-bottom: 15px; font-size: 16px; }
+        button { width: 100%; padding: 12px; background: var(--red); color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; font-weight: bold; }
+        button:hover { opacity: 0.9; }
+        button.secondary { background: #333; margin-top: 10px; }
+        
+        /* Tabs */
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid var(--gray); }
+        .tab-btn { flex: 1; background: none; border: none; color: #666; padding: 15px; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: var(--red); border-bottom: 2px solid var(--red); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* List */
+        .key-list { list-style: none; padding: 0; max-height: 300px; overflow-y: auto; }
+        .key-item { background: #1a1a1a; padding: 10px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid var(--red); }
+        .key-info { flex-grow: 1; word-break: break-all; font-family: monospace; font-size: 14px; }
+        .key-actions button { width: auto; padding: 5px 10px; font-size: 12px; margin-left: 5px; }
+        
+        /* Toast */
+        #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 1; left: 50%; bottom: 30px; transform: translateX(-50%); border-left: 4px solid var(--red); }
+        #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+
+        /* Config Area */
+        .config-area { background: #0a0a0a; padding: 10px; border-radius: 4px; margin-bottom: 20px; border: 1px dashed #444; }
+        .config-area input { margin-bottom: 5px; }
+        .status-ok { color: #0f0; }
+        .status-err { color: #f00; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>KEY SYSTEM</h1>
+</header>
+
+<div class="container">
+    
+    <!-- Configuração do Token -->
+    <div class="card config-area">
+        <h3>⚙️ Configuração</h3>
+        <label>Seu GitHub PAT Token:</label>
+        <input type="password" id="tokenInput" placeholder="Cole seu token ghp_... aqui">
+        <button onclick="saveToken()" style="background:#444; font-size:14px;">Salvar Token</button>
+        <p id="tokenStatus" style="margin-top:10px; font-size:12px;"></p>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="openTab('generator')">Gerador</button>
+        <button class="tab-btn" onclick="openTab('proxy')">Proxy</button>
+        <button class="tab-btn" onclick="openTab('admin')">Admin</button>
+    </div>
+
+    <!-- ABA GERADOR -->
+    <div id="generator" class="tab-content active">
+        <div class="card">
+            <h3>➕ Gerar Nova Key</h3>
+            <label>Prefixo (ex: VIP)</label>
+            <input type="text" id="prefix" value="VIP">
+            
+            <label>Validade</label>
+            <select id="expiry">
+                <option value="7">7 Dias</option>
+                <option value="30" selected>30 Dias</option>
+                <option value="365">1 Ano</option>
+                <option value="9999999999">Indefinido</option>
+            </select>
+
+            <button onclick="generateKey()">GERAR KEY</button>
+            <div id="generatedResult" style="margin-top:15px; display:none; text-align:center;">
+                <p style="color:#aaa; font-size:12px;">KEY GERADA COM SUCESSO!</p>
+                <div style="background:#222; padding:10px; border-radius:4px; word-break:break-all; margin-bottom:10px;" id="newKeyDisplay"></div>
+                <button class="secondary" onclick="copyToClipboard(document.getElementById('newKeyDisplay').innerText)">📋 Copiar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ABA PROXY -->
+    <div id="proxy" class="tab-content">
+        <div class="card">
+            <h3>🔑 Validar Key</h3>
+            <label>Cole sua Key aqui:</label>
+            <input type="text" id="proxyKeyInput" placeholder="PREFIX-D...">
+            <button onclick="validateKey()">VERIFICAR VALIDADE</button>
+            <div id="proxyResult" style="margin-top:15px; text-align:center; display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ABA ADMIN -->
+    <div id="admin" class="tab-content">
+        <div class="card">
+            <h3>🛡️ Gerenciar Keys</h3>
+            <button class="secondary" onclick="loadKeys()">🔄 Atualizar Lista</button>
+            <ul class="key-list" id="keyList">
+                <li style="padding:10px; color:#666;">Nenhuma key gerada ainda.</li>
+            </ul>
+        </div>
+    </div>
+
+</div>
+
+<div id="toast">Copiado!</div>
+
+<script>
+    // --- CONFIGURAÇÃO E TOKEN ---
+    const STORAGE_KEY = 'gh_token';
+    let currentToken = '';
+
+    function init() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            document.getElementById('tokenInput').value = saved;
+            currentToken = saved;
+            updateTokenStatus(true);
+        } else {
+            updateTokenStatus(false);
+        }
+    }
+
+    function saveToken() {
+        const input = document.getElementById('tokenInput');
+        const val = input.value.trim();
+        if (!val) return alert('Cole um token válido!');
+        localStorage.setItem(STORAGE_KEY, val);
+        currentToken = val;
+        updateTokenStatus(true);
+        showToast('Token Salvo com Sucesso!');
+    }
+
+    function updateTokenStatus(ok) {
+        const el = document.getElementById('tokenStatus');
+        el.innerHTML = ok ? '<span class="status-ok">✅ Token Conectado</span>' : '<span class="status-err">❌ Token não configurado</span>';
+    }
+
+    // --- UTILITÁRIOS ---
+    function generateRandomString(length) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < length; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Copiado para a área de transferência!');
+        });
+    }
+
+    function showToast(message) {
+        const x = document.getElementById("toast");
+        x.innerText = message;
+        x.className = "show";
+        setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+    }
+
+    function openTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabName).classList.add('active');
+        event.currentTarget.classList.add('active');
+    }
+
+    // --- LÓGICA PRINCIPAL (GITHUB API) ---
+    
+    // Função auxiliar para fazer requisições autenticadas
+    async function githubRequest(endpoint, method = 'GET', body = null) {
+        if (!currentToken) {
+            alert('Por favor, configure o token nas configurações.');
+            return null;
+        }
+
+        const url = `https://api.github.com${endpoint}`;
+        const options = {
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${currentToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            }
+        };
+
+        if (body) options.body = JSON.stringify(body);
+
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) throw new Error(`Erro ${response.status}: ${response.statusText}`);
+            return await response.json();
+        } catch (error) {
+            console.error(error);
+            alert('Erro na comunicação com o servidor: ' + error.message);
+            return null;
+        }
+    }
+
+    // 1. GERAR KEY
+    async function generateKey() {
+        const prefix = document.getElementById('prefix').value.trim().toUpperCase();
+        const days = parseInt(document.getElementById('expiry').value);
+        
+        // Gera uma string aleatória de 8 caracteres
+        const randomPart = generateRandomString(8);
+        const fullKey = `${prefix}-${randomPart}`;
+        
+        // Calcula data de expiração
+        const expiryDate = new Date();
+        if (days !== 9999999999) {
+            expiryDate.setDate(expiryDate.getDate() + days);
+        }
+
+        // Cria o arquivo no GitHub
+        // Usamos o repositório público padrão ou criamos um novo? 
+        // Para simplificar, vamos criar um arquivo JSON dentro de uma pasta específica no repo principal do user
+        // OU melhor: Vamos usar o gist público se o token permitir, ou apenas salvar num arquivo no repo.
+        // Como é um token pessoal genérico, vou assumir que ele tem acesso ao seu repo principal.
+        // Para ser mais robusto sem saber o nome do repo, vou criar um Gist Público.
+        
+        const gistData = {
+            "description": `Key System: ${fullKey}`,
+            "public": true,
+            "files": {
+                `${prefix}_${randomPart}.json`: {
+                    "content": JSON.stringify({
+                        key: fullKey,
+                        created_at: new Date().toISOString(),
+                        expires_at: expiryDate.toISOString(),
+                        status: "active"
+                    })
+                }
+            }
+        };
+
+        const result = await githubRequest('/gists', 'POST', gistData);
+        
+        if (result) {
+            // Extrai a URL raw do gist para facilitar validação futura se necessário
+            const rawUrl = Object.values(result.files)[0].raw_url;
+            
+            document.getElementById('generatedResult').style.display = 'block';
+            document.getElementById('newKeyDisplay').innerText = fullKey;
+            showToast('Key criada no servidor!');
+        }
+    }
+
+    // 2. VALIDAR KEY (PROXY)
+    async function validateKey() {
+        const inputKey = document.getElementById('proxyKeyInput').value.trim();
+        const resultDiv = document.getElementById('proxyResult');
+        
+        if (!inputKey) return;
+
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<p>Verificando...</p>';
+
+        // Estratégia de busca:
+        // Precisamos procurar entre os Gists públicos por um arquivo que contenha essa key.
+        // Isso pode ser lento. Uma alternativa melhor seria ter um arquivo "database.json" único.
+        // Mas para este demo, vamos tentar buscar nos Gists recentes ou usar um endpoint específico.
+        
+        // MELHOR ABORDAGEM PARA DEMO:
+        // Vamos assumir que salvamos as keys num arquivo centralizado "keys_db.json" no seu repo.
+        // Se você não tiver um repo configurado, vamos simular a busca nos Gists públicos recentes.
+        
+        // Para este exemplo funcionar "fora da caixa", vou buscar nos seus Gists Públicos.
+        try {
+            const myGists = await githubRequest('/gists/public');
+            if (!myGists) throw new Error("Não foi possível listar seus Gists.");
+
+            let found = false;
+            let keyData = null;
+
+            // Procura o arquivo exato
+            for (const gist of myGists) {
+                const files = Object.keys(gist.files || {});
+                for (const filename of files) {
+                    if (filename.endsWith('.json')) {
+                        // Pega o conteúdo do arquivo
+                        const contentUrl = gist.files[filename].raw_url;
+                        const contentRes = await fetch(contentUrl);
+                        if (contentRes.ok) {
+                            const data = await contentRes.json();
+                            if (data.key === inputKey) {
+                                found = true;
+                                keyData = data;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (found) break;
+            }
+
+            if (found) {
+                const now = new Date();
+                const exp = new Date(keyData.expires_at);
+                
+                if (now > exp && keyData.expires_at !== "9999-12-31T23:59:59.999Z") {
+                     resultDiv.innerHTML = `<p class="status-err">❌ KEY EXPIRADA</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p class="status-ok">✅ KEY VÁLIDA! Acesso Liberado.</p>`;
+                }
+            } else {
+                resultDiv.innerHTML = `<p class="status-err">❌ KEY NÃO ENCONTRADA</p>`;
+            }
+
+        } catch (e) {
+            resultDiv.innerHTML = `<p class="status-err">Erro: ${e.message}</p>`;
+        }
+    }
+
+    // 3. ADMIN (LISTAR)
+    async function loadKeys() {
+        const list = document.getElementById('keyList');
+        list.innerHTML = '<li style="padding:10px;">Carregando...</li>';
+
+        const myGists = await githubRequest('/gists/public');
+        if (!myGists) {
+            list.innerHTML = '<li style="padding:10px; color:red;">Erro ao carregar.</li>';
+            return;
+        }
+
+        let html = '';
+        let count = 0;
+
+        for (const gist of myGists) {
+            const files = gist.files || {};
+            for (const [filename, fileObj] of Object.entries(files)) {
+                if (filename.endsWith('.json') && fileObj.content) {
+                    try {
+                        const data = JSON.parse(fileObj.content);
+                        // Formata data
+                        const expDate = new Date(data.expires_at).toLocaleDateString();
+                        
+                        html += `
+                        <li class="key-item">
+                            <div class="key-info">
+                                <strong>${data.key}</strong><br>
+                                <small style="color:#666">Exp: ${expDate}</small>
+                            </div>
+                            <div class="key-actions">
+                                <button class="secondary" onclick="navigator.clipboard.writeText('${data.key}'); showToast('Copiado');">Copiar</button>
+                            </div>
+                        </li>`;
+                        count++;
+                    } catch(e) {}
+                }
+            }
+        }
+
+        if (count === 0) {
+            list.innerHTML = '<li style="padding:10px; color:#666;">Nenhuma key encontrada.</li>';
+        } else {
+            list.innerHTML = html;
+        }
+    }
+
+    // Inicializa
+    init();
+</script>
+
+</body>
+    </html>
